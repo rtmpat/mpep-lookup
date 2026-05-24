@@ -1,0 +1,63 @@
+# Build the corpus from USPTO and publish the packaged skill as a GitHub
+# release asset. Triggered by pushing a semver tag, e.g.:
+#
+#   git tag v1.0.0 && git push origin v1.0.0
+#
+# The tag must match the `version:` in skill/SKILL.md (checked below). The
+# .skill bundle is gitignored, so it is built fresh here rather than committed.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write          # GITHUB_TOKEN needs this to create the release
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      # First-party actions pinned to major versions. For a stricter
+      # supply-chain posture, pin these to a full commit SHA.
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Verify tag matches skill version
+        run: python build/print_meta.py --assert-version "${GITHUB_REF_NAME#v}"
+
+      - name: Build corpus, verify, and package
+        run: |
+          python build/01_fetch_corpus.py
+          python build/02_parse_to_markdown.py
+          python build/03_build_database.py
+          python build/04_verify_corpus.py
+          pytest -q
+          python build/05_package_skill.py
+
+      - name: Assemble release asset and notes
+        id: meta
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          REV="$(python build/print_meta.py source_revision)"
+          ASSET="mpep-lookup-${GITHUB_REF_NAME}-mpep-${REV}.skill"
+          cp mpep-lookup.skill "$ASSET"
+          python build/extract_changelog.py "$VER" > RELEASE_NOTES.md
+          {
+            echo "asset=$ASSET"
+            echo "revision=$REV"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            "${{ steps.meta.outputs.asset }}" \
+            --title "MPEP Lookup ${GITHUB_REF_NAME} (MPEP ${{ steps.meta.outputs.revision }})" \
+            --notes-file RELEASE_NOTES.md

@@ -1,0 +1,10 @@
+[project]
+name = "mpep-lookup"
+version = "0.1.0"
+requires-python = ">=3.12"
+description = "Verbatim MPEP/35 USC/37 CFR retrieval skill (Claude Code local + Claude.ai cloud)"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+addopts = "-ra -q"

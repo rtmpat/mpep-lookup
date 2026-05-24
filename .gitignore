@@ -1,0 +1,42 @@
+# Override parent .gitignore's build/ rule (Python convention) so our
+# build/ scripts are tracked. Cache subdirs below remain ignored.
+!build/
+!build/**
+
+# Build cache (regenerable)
+build/raw_html/
+build/__pycache__/
+intermediate/
+
+# Skill output
+skill/data/mpep.db
+*.skill
+
+# Changelog is copied from the repo root into skill/ at build time (canonical
+# copy is CHANGELOG.md at the repo root).
+skill/CHANGELOG.md
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
+
+# Local-only tooling artifacts (reports, analytics)
+.gstack/
+
+# Cross-repo transfer docs (per transfer protocol - kept local, never published)
+transfers/
+
+# Internal dev-history kept local for session context, not published.
+# LESSONS.md and TODOS.md in docs/dev-history/ ARE published; these two are
+# solo-project voice / reference dangling old-repo commit hashes.
+docs/dev-history/STATUS.md
+docs/dev-history/phase0a_report.md

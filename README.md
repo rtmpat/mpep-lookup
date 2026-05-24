@@ -5,6 +5,12 @@ prosecution question and get back the *actual text* of the MPEP, the patent
 statutes, and the patent rules -- quoted word-for-word with pin cites --
 instead of a paraphrase that might be subtly (or badly) wrong.
 
+**Nothing leaves your Claude environment.** The skill is self-contained: a
+bundled SQLite database queried by local scripts that run inside Claude's own
+sandbox. There are no network calls and no external server to contact -- unlike
+an MCP server, where the model reaches out to a separate service to answer your
+query. The lookup happens entirely within the LLM environment it already runs in.
+
 > **What this is not:** a chatbot that "knows patent law." It is a retrieval
 > tool. Every quoted passage comes from a local copy of the official USPTO
 > text, and Claude is instructed to verify each quotation against that source
@@ -77,11 +83,11 @@ ln -s "$(pwd)/skill" ~/.claude/skills/mpep-lookup
 
 **Look up a rule by citation.**
 
-> *"My examiner cited 37 CFR 1.97 for a late IDS. What are the requirements?"*
+> *"What are the timing requirements for filing an IDS in 37 CFR 1.97?"*
 
-Claude returns the verbatim text of 37 C.F.R. 1.97, with the subsection that
-governs the timing requirement quoted and pin-cited, then -- clearly labeled
-as analysis -- how it maps to the situation.
+Claude returns the verbatim text of 37 C.F.R. 1.97, with the subsections that
+govern the timing requirements quoted and pin-cited, plus a clearly labeled
+plain-language summary of what they require.
 
 **Find the controlling authority on a topic.**
 

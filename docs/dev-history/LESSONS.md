@@ -222,3 +222,26 @@ relevance. It works best for statutes/CFR (always cited with full
 "35 U.S.C."/"37 CFR" prefixes, so counts are reliable); MPEP-section counts
 are undercounted because cross-refs often drop the "MPEP" prefix. Improving
 MPEP-ref extraction would let alpha go higher safely - a future refinement.
+
+## 2026-05-24 - source_revision was derived from an arbitrary section, not the edition
+
+**Problem:** The release asset nearly shipped named `mpep-...-R-07.2015.skill` -
+implying a 9-year-old corpus - even though the build fetched the current Ninth
+Edition, Revision 01.2024.
+
+**Root cause:** `03_build_database.py` set `metadata.source_revision` from
+`SELECT revision FROM sections WHERE kind='mpep_section' ... LIMIT 1` - an
+arbitrary section. Each MPEP section heading carries the revision in which that
+section was last changed, so the corpus has 11 distinct markers (R-01.2024 x552,
+R-07.2022 x375, R-07.2015 x246, ...). The first row by rowid happened to be an
+R-07.2015 section.
+
+**Solution:** the edition is the NEWEST revision present (no section can be
+revised later than the edition shipping it). Pick the max by (year,
+revision-number) over the distinct markers; malformed ones (e.g. a typo'd
+"R-08.1012") sort low and lose. Now correctly R-01.2024.
+
+**Lesson:** when a value is meant to be a corpus-wide constant but you derive it
+from per-record data, `LIMIT 1` is a latent bug - aggregate (max/mode) instead.
+This one stayed invisible until the release-asset naming put the wrong value in
+front of a human.

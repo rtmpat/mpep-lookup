@@ -37,18 +37,19 @@ property -- **verbatim discipline**:
 ## Install
 
 The fastest path for either target is the prebuilt `mpep-lookup.skill`
-bundle from [**Releases**](../../releases) -- it already contains the corpus
-database.
+bundle -- it already contains the corpus database:
+
+**[Download the latest `mpep-lookup.skill`](../../releases/latest/download/mpep-lookup.skill)** (or browse [all releases](../../releases)).
 
 ### Claude.ai (web/desktop)
 
-1. Download `mpep-lookup.skill` from the latest release.
+1. [Download the latest `mpep-lookup.skill`](../../releases/latest/download/mpep-lookup.skill).
 2. In Claude.ai, open the skills UI and upload the `.skill` bundle.
 3. Ask a patent question. The skill triggers automatically.
 
 ### Claude Code (CLI)
 
-1. Download `mpep-lookup.skill` from the latest release.
+1. [Download the latest `mpep-lookup.skill`](../../releases/latest/download/mpep-lookup.skill).
 2. Unzip it into your skills directory:
    ```sh
    mkdir -p ~/.claude/skills/mpep-lookup

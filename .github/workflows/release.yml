@@ -57,7 +57,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Attach both the versioned asset (archival; names the MPEP revision)
+          # and a stable-named copy, so the README can link a permanent
+          # "latest" download: /releases/latest/download/mpep-lookup.skill
           gh release create "${GITHUB_REF_NAME}" \
             "${{ steps.meta.outputs.asset }}" \
+            mpep-lookup.skill \
             --title "MPEP Lookup ${GITHUB_REF_NAME} (MPEP ${{ steps.meta.outputs.revision }})" \
             --notes-file RELEASE_NOTES.md

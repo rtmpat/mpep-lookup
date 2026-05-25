@@ -33,6 +33,13 @@ CASES_USER_INPUT = [
     ("MPEP § 2141.01(a)", "mpep_section", "MPEP 2141.01(a)", "mpep_2141_01_a"),
     ("MPEP Section 2141.01 sub a", "mpep_section", "MPEP 2141.01(a)", "mpep_2141_01_a"),
     ("mpep 2141.01(A)", "mpep_section", "MPEP 2141.01(a)", "mpep_2141_01_a"),
+    # MPEP sub-subsection (letter)(number) - silently dropped before the parser
+    # fix; USPTO emits each as its own h1.page-title (e.g. 2106.04(d)(1)).
+    ("MPEP 2106.04(d)(1)", "mpep_section", "MPEP 2106.04(d)(1)", "mpep_2106_04_d_1"),
+    ("2106.04(d)(1)", "mpep_section", "MPEP 2106.04(d)(1)", "mpep_2106_04_d_1"),
+    ("MPEP 2106.04(d) (1)", "mpep_section", "MPEP 2106.04(d)(1)", "mpep_2106_04_d_1"),
+    ("MPEP 1002.02(c)(1)", "mpep_section", "MPEP 1002.02(c)(1)", "mpep_1002_02_c_1"),
+    ("M.P.E.P. 1002.02(k)(2)", "mpep_section", "MPEP 1002.02(k)(2)", "mpep_1002_02_k_2"),
     # 35 USC
     ("35 USC 102", "statute", "35 USC 102", "35_usc_102"),
     ("35 U.S.C. 102", "statute", "35 USC 102", "35_usc_102"),

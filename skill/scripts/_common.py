@@ -38,8 +38,12 @@ _RE_CFR_NUM = r"(?P<num>\d{1,3}\.\d{1,4}(?:\([a-z]\))?)"
 _VARIANT_RE = r"\((?:[^()]+|\([^()]*\))*\)"
 
 # Heading-form patterns (for parsing HTML headings during build phase).
+# num allows a SEQUENCE of parenthetical groups so sub-subsections like
+# 2106.04(d)(1) and 1002.02(c)(1) parse (not just a single (letter)). USPTO
+# emits each of these as its own <h1 class="page-title">; matching only one
+# paren group silently dropped them at build time. See LESSONS.md.
 _RE_HEADING_MPEP = re.compile(
-    r"^\s*(?P<num>\d{1,4}(?:\.\d{1,2})?(?:\([a-z]\))?)\s+(?P<title>.+?)"
+    r"^\s*(?P<num>\d{1,4}(?:\.\d{1,2})?(?:\([a-z0-9]+\))*)\s+(?P<title>.+?)"
     r"(?:\s*\[(?P<rev>R[‐‑‒–—―\-]\d{2}\.\d{4})\])?\s*$",
     re.DOTALL,
 )
@@ -66,7 +70,8 @@ _RE_USER_MPEP = re.compile(
     r"^\s*(?:M\.?P\.?E\.?P\.?\s*)?"
     r"(?:s\.?\s*|Section\s+|Sec\.\s*|§\s*)?"
     r"(?P<num>\d{1,4}(?:\.\d{1,2})?)"
-    r"(?:\s*(?:\(\s*(?P<sub>[a-z])\s*\)|\s+sub\s+(?P<sub2>[a-z])))?"
+    r"(?P<subs>(?:\s*\(\s*[a-z0-9]+\s*\))*)"
+    r"(?:\s+sub\s+(?P<sub2>[a-z]))?"
     r"\s*$",
     re.IGNORECASE,
 )
@@ -242,9 +247,12 @@ def parse_citation(text: str, kind_hint: str | None = None) -> dict:
     m = _RE_USER_MPEP.match(s_norm)
     if m:
         num = m.group("num")
-        sub = m.group("sub") or m.group("sub2")
-        if sub:
-            num = f"{num}({sub.lower()})"
+        # Append each parenthetical sub-group in order: (d)(1) -> "(d)(1)".
+        for part in re.findall(r"\(\s*([a-z0-9]+)\s*\)", m.group("subs") or "",
+                               re.IGNORECASE):
+            num = f"{num}({part.lower()})"
+        if m.group("sub2"):  # "... sub a" spoken/written form
+            num = f"{num}({m.group('sub2').lower()})"
         citation = f"MPEP {num}"
         return {"kind": "mpep_section", "citation": citation,
                 "citation_normalized": normalize(citation)}

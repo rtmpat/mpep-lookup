@@ -13,6 +13,7 @@ Usage: python build/02_parse_to_markdown.py
 
 import json
 import pathlib
+import re
 import sys
 from typing import Iterable
 
@@ -182,37 +183,74 @@ def _slice_records(soup: BeautifulSoup) -> list[tuple[Tag, list[Tag | NavigableS
     return records
 
 
-def parse_mpep_section_file(html: str, source_url: str) -> Iterable[dict]:
-    """Parse an sNNNN.html file. Emits multiple records (top + subsections).
+# Every h1.page-title heading we could not parse as an MPEP citation AND could
+# not fold into a section is recorded here (not silently swallowed). main()
+# writes the log and FAILS the build on any drop that still carries content -
+# silent coverage gaps are the bug that dropped 2106.04(d)(1) and 894 inline
+# form paragraphs.
+_HEADING_DROPS: list[dict] = []
 
-    Each <h1 class="page-title"> with a citation-pattern heading is one record.
+_PILCROW = chr(0xB6)  # pilcrow; inline form-paragraph heading marker
+
+
+def _is_suspicious_drop(heading: str, body_md: str) -> bool:
+    """A dropped slice is suspicious (build-failing) if it still carries real
+    content and is not a [Reserved] placeholder. Inline form paragraphs are
+    folded into their parent section, so they do not reach the drop path."""
+    if "[Reserved]" in heading:
+        return False  # reserved placeholders (e.g. 1504.11-1504.19) are expected
+    return bool(body_md.strip())
+
+
+def parse_mpep_section_file(html: str, source_url: str) -> Iterable[dict]:
+    """Parse an sNNNN.html file. Emits one record per section/subsection h1.
+
+    Inline form-paragraph examples (<h1 class="page-title"> starting with the
+    pilcrow) are part of the section as the MPEP reads, so they are FOLDED into
+    the current section's body rather than dropped. Each genuine section/
+    subsection heading (incl. (letter)(number) sub-subsections) is its own
+    record.
     """
     soup = BeautifulSoup(html, "lxml")
     chapter = _chapter_from_url(source_url)
-    for heading_h1, body_nodes in _slice_records(soup):
-        heading_text = " ".join(heading_h1.get_text().split())
-        try:
-            parsed = parse_citation(heading_text, kind_hint="mpep_section")
-        except ValueError:
-            # Heading didn't match - might be an end-of-document chrome h1
-            continue
-        body_md = "".join(_md_text(n) for n in body_nodes)
-        body_md = ascii_safe(body_md)
-        body_md = _normalize_whitespace(body_md)
-        # Determine parent citation
-        num = parsed["citation"].removeprefix("MPEP ").strip()
+    pending: dict | None = None  # {parsed, body} accumulating until next section
+
+    def _finalize(rec: dict) -> dict:
+        num = rec["parsed"]["citation"].removeprefix("MPEP ").strip()
         parent = _mpep_parent(num)
-        yield {
-            "citation": parsed["citation"],
-            "citation_normalized": parsed["citation_normalized"],
-            "title": ascii_safe(parsed["title"]),
+        return {
+            "citation": rec["parsed"]["citation"],
+            "citation_normalized": rec["parsed"]["citation_normalized"],
+            "title": ascii_safe(rec["parsed"]["title"]),
             "kind": "mpep_section",
             "chapter": chapter,
             "parent_citation": f"MPEP {parent}" if parent else None,
-            "revision": parsed.get("revision"),
-            "body_md": body_md,
+            "revision": rec["parsed"].get("revision"),
+            "body_md": _normalize_whitespace(rec["body"]),
             "source_url": source_url,
         }
+
+    for heading_h1, body_nodes in _slice_records(soup):
+        heading_text = " ".join(heading_h1.get_text().split())
+        body_md = ascii_safe("".join(_md_text(n) for n in body_nodes))
+        try:
+            parsed = parse_citation(heading_text, kind_hint="mpep_section")
+        except ValueError:
+            # Not a section heading. Fold an inline form paragraph into the
+            # current section; otherwise record the drop for the fail-loud guard.
+            if pending is not None and heading_text.lstrip().startswith(_PILCROW):
+                pending["body"] += f"\n\n{ascii_safe(heading_text)}\n{body_md}"
+            else:
+                _HEADING_DROPS.append({
+                    "source_url": source_url, "heading": heading_text,
+                    "has_body": bool(body_md.strip()),
+                    "suspicious": _is_suspicious_drop(heading_text, body_md)})
+            continue
+        if pending is not None:
+            yield _finalize(pending)
+        pending = {"parsed": parsed, "body": body_md}
+    if pending is not None:
+        yield _finalize(pending)
 
 
 def parse_appendix_l_file(html: str, source_url: str) -> Iterable[dict]:
@@ -439,15 +477,16 @@ def parse_index_file(html: str, source_url: str) -> Iterable[dict]:
 
 
 def _mpep_parent(num: str) -> str | None:
-    """Compute parent citation number from MPEP section number.
+    """Compute the immediate parent citation number from an MPEP number.
 
-    2141        -> None (top-level)
-    2141.01     -> 2141
-    2141.01(a)  -> 2141.01
+    2141           -> None (top-level)
+    2141.01        -> 2141
+    2141.01(a)     -> 2141.01
+    2106.04(d)     -> 2106.04
+    2106.04(d)(1)  -> 2106.04(d)   (strip the LAST paren group, not the first)
     """
-    import re
-    if "(" in num:
-        return num.split("(")[0].rstrip(".")
+    if num.endswith(")"):
+        return num[: num.rindex("(")]
     if "." in num:
         return num.rsplit(".", 1)[0]
     return None
@@ -565,6 +604,7 @@ def main() -> int:
         print("No raw HTML found under build/raw_html/", file=sys.stderr)
         return 1
 
+    _HEADING_DROPS.clear()  # reset module state (re-runs / tests)
     counts: dict[str, int] = {}
     all_dropped: list[dict] = []
     failures = []
@@ -599,6 +639,24 @@ def main() -> int:
         dup_path = REPO_ROOT / "intermediate" / "_duplicates.json"
         dup_path.write_text(json.dumps(all_dropped, indent=2))
         print(f"  duplicates logged to {dup_path}")
+
+    # Heading-drop accounting: log every unparsed h1.page-title and FAIL LOUD on
+    # any that look like a real MPEP section (a silent coverage gap is the bug
+    # that dropped 2106.04(d)(1) et al.). Expected skips (empty chrome h1s,
+    # inline form paragraphs, [Reserved] ranges) are logged but not fatal.
+    if _HEADING_DROPS:
+        drop_path = REPO_ROOT / "intermediate" / "_dropped_headings.json"
+        drop_path.write_text(json.dumps(_HEADING_DROPS, indent=2))
+        suspicious = [d for d in _HEADING_DROPS if d["suspicious"]]
+        print(f"  {len(_HEADING_DROPS)} h1.page-title headings unparsed "
+              f"({len(suspicious)} suspicious); logged to {drop_path}")
+        if suspicious:
+            print(f"\nFAILED: {len(suspicious)} heading(s) look like real MPEP "
+                  "sections but did not parse (possible coverage gap):",
+                  file=sys.stderr)
+            for d in suspicious[:20]:
+                print(f"  - {d['heading'][:80]}  ({d['source_url']})", file=sys.stderr)
+            return 1
     return 0
 
 

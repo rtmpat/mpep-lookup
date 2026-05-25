@@ -157,6 +157,71 @@ _INDEX_HTML = """
 """
 
 
+_SUBSUB_HTML = """
+<html><body>
+<h1 class="page-title">2106.04(d) Integration of a Judicial Exception [R-07.2022]</h1>
+<p>Parent body text.</p>
+<h1 class="page-title">2106.04(d)(1) Evaluating Improvements in the Functioning of a Computer [R-07.2022]</h1>
+<p>Sub-subsection body text that must not be dropped.</p>
+<h1 class="page-title">2106.04(d)(2) Particular Treatment and Prophylaxis [R-07.2022]</h1>
+<p>Another sub-subsection.</p>
+</body></html>
+"""
+
+
+def test_parser_captures_letter_number_subsubsections() -> None:
+    """Regression: 2106.04(d)(1)/(d)(2) are their own h1.page-title records and
+    must not be silently dropped (the bug this revision fixes)."""
+    parser = _load_parser()
+    recs = list(parser.parse_mpep_section_file(_SUBSUB_HTML, "https://example/s2106.html"))
+    by_cit = {r["citation"]: r for r in recs}
+    assert "MPEP 2106.04(d)(1)" in by_cit
+    assert "MPEP 2106.04(d)(2)" in by_cit
+    assert "must not be dropped" in by_cit["MPEP 2106.04(d)(1)"]["body_md"]
+    # parent is the immediate parent, not the top-level section
+    assert by_cit["MPEP 2106.04(d)(1)"]["parent_citation"] == "MPEP 2106.04(d)"
+
+
+def test_is_suspicious_drop_predicate() -> None:
+    """The re-tightened guard flags any content-bearing drop that is not a
+    [Reserved] placeholder (inline form paragraphs are folded, not dropped)."""
+    parser = _load_parser()
+    assert parser._is_suspicious_drop("2106.04(z)(9) New Heading", "Real body.") is True
+    assert parser._is_suspicious_drop("Anything with content", "Body text here.") is True
+    assert parser._is_suspicious_drop("1504.11-1504.19 [Reserved]", "") is False
+    assert parser._is_suspicious_drop("2106.04(d)(2) [Reserved]", "  \n ") is False
+    assert parser._is_suspicious_drop("Empty chrome heading", "") is False
+
+
+# &para; is the pilcrow that marks an inline form-paragraph heading.
+_FOLD_HTML = """
+<html><body>
+<h1 class="page-title">1207.02 Contents of Examiner's Answer [R-07.2022]</h1>
+<p>The examiner's answer must contain the following items.</p>
+<h1 class="page-title">&para; 12.249 Examiner's Answer Cover Sheet</h1>
+<p>This is a Supplemental Examiner's Answer in response to a remand.</p>
+<h1 class="page-title">1207.03 New Ground of Rejection [R-10.2019]</h1>
+<p>An examiner may make a new ground of rejection.</p>
+</body></html>
+"""
+
+
+def test_parser_folds_inline_form_paragraph_into_section() -> None:
+    """Inline form-paragraph examples are folded into the parent section body,
+    not dropped (Option A); the fold stops at the next real section."""
+    parser = _load_parser()
+    parser._HEADING_DROPS.clear()
+    recs = list(parser.parse_mpep_section_file(_FOLD_HTML, "https://example/s1207.html"))
+    by_cit = {r["citation"]: r for r in recs}
+    assert "MPEP 1207.02" in by_cit
+    body = by_cit["MPEP 1207.02"]["body_md"]
+    assert "12.249" in body and "Paragraph" in body  # pilcrow -> "Paragraph "
+    assert "Supplemental Examiner" in body            # the FP body folded in
+    assert "MPEP 1207.03" in by_cit                   # fold stops at next section
+    assert "new ground of rejection" in by_cit["MPEP 1207.03"]["body_md"].lower()
+    assert all(not d["suspicious"] for d in parser._HEADING_DROPS)
+
+
 def test_parse_index_hierarchy_refs_and_see_also() -> None:
     parser = _load_parser()
     recs = list(parser.parse_index_file(_INDEX_HTML, "https://example/mpep-index-a.html"))

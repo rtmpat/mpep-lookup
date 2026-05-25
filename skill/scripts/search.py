@@ -47,7 +47,26 @@ import re
 import sqlite3
 import sys
 
-from _common import connect_db, parse_citation
+from _common import connect_db, normalize, parse_citation
+
+
+def _annotate_supersessions(conn: sqlite3.Connection, hits: list[dict]) -> None:
+    """Flag hits whose provision has a post-revision supersession.
+
+    A superseded result still ranks normally, but the caller is warned that the
+    published text it matched has been overridden in part - go check the
+    supersession (lookup.py auto-surfaces it). No-op on a pre-1.1.0 DB."""
+    if not hits:
+        return
+    try:
+        affected = {r[0] for r in conn.execute(
+            "SELECT DISTINCT affected_citation_normalized FROM supersessions "
+            "WHERE affected_citation_normalized IS NOT NULL")}
+    except sqlite3.OperationalError:
+        return
+    for h in hits:
+        if normalize(h["citation"]) in affected:
+            h["superseded"] = True
 
 # bm25 weights for the 3 indexed FTS columns (citation, title, body_md).
 # citation+title are boosted 4x over body so topic/section matches beat raw
@@ -134,7 +153,8 @@ def _emit(hits: list[dict], args: argparse.Namespace, total_records: int) -> Non
         rankstr = f"rank {rank:.2f}" if rank is not None else "via index"
         refs = h.get("inbound_refs")
         refstr = f", refs {refs}" if refs else ""
-        print(f"\n[{h['kind']:14}] {h['citation']:30} ({h['match']}, {rankstr}{refstr})")
+        sup = "  [SUPERSEDED -- see supersession via lookup.py]" if h.get("superseded") else ""
+        print(f"\n[{h['kind']:14}] {h['citation']:30} ({h['match']}, {rankstr}{refstr}){sup}")
         print(f"  Title: {h['title']}")
         if h.get("via_index_term"):
             print(f"  Index term: {h['via_index_term']}")
@@ -180,7 +200,9 @@ def _keyword_search(conn: sqlite3.Connection, args: argparse.Namespace,
                "inbound_refs": n}
         scored.append((_ref_score(r[6], n), hit))
     scored.sort(key=lambda x: x[0])
-    _emit([h for _, h in scored[: args.limit]], args, total_records)
+    hits = [h for _, h in scored[: args.limit]]
+    _annotate_supersessions(conn, hits)
+    _emit(hits, args, total_records)
     return 0
 
 
@@ -281,7 +303,9 @@ def _fused_search(conn: sqlite3.Connection, args: argparse.Namespace,
         candidates.append((tier, _ref_score(bm25, refs), hit))
 
     candidates.sort(key=lambda c: (c[0], c[1]))
-    _emit([c[2] for c in candidates[: args.limit]], args, total_records)
+    hits = [c[2] for c in candidates[: args.limit]]
+    _annotate_supersessions(conn, hits)
+    _emit(hits, args, total_records)
     return 0
 
 

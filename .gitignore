@@ -12,6 +12,11 @@ intermediate/
 skill/data/mpep.db
 *.skill
 
+# Bundled supersession PDFs: a build artifact derived from build/supersessions/pdf/
+# via the size-budget allocation in supersessions_loader.bundle_pdfs(). The
+# provenance copies under build/supersessions/pdf/ ARE tracked.
+skill/references/supersessions_pdf/
+
 # Changelog is copied from the repo root into skill/ at build time (canonical
 # copy is CHANGELOG.md at the repo root).
 skill/CHANGELOG.md

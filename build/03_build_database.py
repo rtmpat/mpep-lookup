@@ -23,6 +23,14 @@ DB_PATH = REPO_ROOT / "skill" / "data" / "mpep.db"
 sys.path.insert(0, str(REPO_ROOT / "skill" / "scripts"))
 from _common import parse_citation  # noqa: E402
 
+# Sidecar supersession loader (build/supersessions_loader.py). build/ is on
+# sys.path because this script lives there.
+from supersessions_loader import (  # noqa: E402
+    bundle_pdfs,
+    create_schema as create_supersession_schema,
+    validate_and_load as load_supersessions,
+)
+
 SCHEMA_SQL = """
 CREATE TABLE sections (
   id                   INTEGER PRIMARY KEY,
@@ -233,6 +241,15 @@ def main() -> int:
     conn.execute("INSERT INTO sections_fts(sections_fts) VALUES('optimize')")
     conn.commit()
 
+    # Load post-revision supersessions into the sidecar table. Runs AFTER
+    # sections are committed so citation linkage resolves against real records.
+    # Fail loud: a SupersessionError propagates and aborts the build rather than
+    # shipping a corpus that silently omits or half-handles a superseding memo.
+    create_supersession_schema(conn)
+    super_summary = load_supersessions(conn)
+    conn.commit()
+    bundle_pdfs(super_summary)
+
     # Populate metadata
     total = sum(counts_by_kind.values())
     metadata = {
@@ -240,8 +257,15 @@ def main() -> int:
         "built_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "total_records": str(total),
         "record_counts_by_kind": json.dumps(counts_by_kind, sort_keys=True),
-        "builder_version": "1.0.0",
+        "builder_version": "1.1.0",
         "corpus_source": "https://www.uspto.gov/web/offices/pac/mpep/",
+        # Supersessions: source_revision stays the edition (R-01.2024); these
+        # keys record the post-revision memos overlaid on top of it.
+        "supersessions_through": super_summary["supersessions_through"] or "",
+        "supersession_count": str(super_summary["supersession_count"]),
+        "supersession_memos": json.dumps(super_summary["supersession_memos"]),
+        "supersession_pdf_bundled": json.dumps(super_summary["pdf_bundled"]),
+        "supersession_pdf_link_only": json.dumps(super_summary["pdf_link_only"]),
     }
     # source_revision = the edition's revision. Each MPEP section heading
     # carries the revision it was last changed in (older, unchanged sections
@@ -271,6 +295,11 @@ def main() -> int:
     print("Counts by kind:")
     for k, n in sorted(counts_by_kind.items()):
         print(f"  {k:20} {n:>5}")
+    print(f"Supersessions: {super_summary['supersession_count']} record(s) "
+          f"through {super_summary['supersessions_through']} "
+          f"from memo(s) {super_summary['supersession_memos']}")
+    print(f"  PDFs bundled: {super_summary['pdf_bundled']}; "
+          f"link-only: {super_summary['pdf_link_only']}")
     print(f"DB size: {DB_PATH.stat().st_size:,} bytes")
     return 1 if failures else 0
 

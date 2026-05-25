@@ -12,9 +12,75 @@ Usage:
 
 import argparse
 import json
+import sqlite3
 import sys
 
 from _common import connect_db, format_record, parse_citation
+
+
+_SUPER_COLS = (
+    "affected_citation", "status", "change_detail", "source_memo", "memo_date",
+    "effective_date", "legal_trigger", "source_pdf_url", "pdf_bundled",
+    "pdf_local_path", "in_corpus", "revised_text_md", "redline_md", "summary",
+)
+
+
+def _fetch_supersessions(conn: sqlite3.Connection, normalized: str) -> list[dict]:
+    """Supersessions whose affected provision linkage matches this record.
+
+    One lookup can surface several (e.g. MPEP 2106.04(d) is linked by both the
+    subsection III addition and the 2106.04(d)(1) revision). Returns [] if the
+    supersessions table is absent (a pre-1.1.0 DB) rather than crashing - the
+    build, not runtime, is where a missing table must fail loud.
+    """
+    try:
+        rows = conn.execute(
+            f"SELECT {', '.join(_SUPER_COLS)} FROM supersessions "
+            "WHERE affected_citation_normalized = ? ORDER BY id",
+            (normalized,),
+        ).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [dict(zip(_SUPER_COLS, r)) for r in rows]
+
+
+def _format_supersession_block(supers: list[dict]) -> str:
+    """Render a clearly-labeled SUPERSEDED block to append after the record."""
+    bar = "=" * 72
+    out = [
+        "",
+        bar,
+        f"SUPERSEDED IN PART -- {len(supers)} post-revision USPTO update(s) "
+        "affect this provision",
+        "The text above is the published edition (R-01.2024). For the affected "
+        "passages, quote the verbatim revised text below and pin-cite the memo.",
+        bar,
+    ]
+    for i, s in enumerate(supers, 1):
+        out.append("")
+        out.append(f"[{i}] {s['affected_citation']} -- {s['status'].upper()}")
+        out.append(f"    Memo: {s['source_memo']} ({s['memo_date']})")
+        if s.get("legal_trigger"):
+            out.append(f"    Trigger: {s['legal_trigger']}")
+        out.append(f"    Effective: {s['effective_date']}")
+        pdf = f"    Source PDF: {s['source_pdf_url']}"
+        if s.get("pdf_bundled") and s.get("pdf_local_path"):
+            pdf += f"  (bundled: {s['pdf_local_path']})"
+        out.append(pdf)
+        out.append(f"    Summary: {s['summary']}")
+        if s.get("change_detail"):
+            out.append(f"    Change: {s['change_detail']}")
+        if s.get("revised_text_md"):
+            out.append("")
+            out.append("    Revised text (verbatim from the memo):")
+            for ln in s["revised_text_md"].splitlines():
+                out.append(f"      {ln}" if ln else "")
+        if s.get("redline_md"):
+            out.append("")
+            out.append("    Redline ([[ins:...]] added, [[del:...]] removed):")
+            for ln in s["redline_md"].splitlines():
+                out.append(f"      {ln}" if ln else "")
+    return "\n".join(out)
 
 
 def _truncate_to_words(body: str, max_words: int) -> tuple[str, int, int]:
@@ -100,7 +166,17 @@ def main() -> int:
         record["word_count_full"] = total
         record["word_count_returned"] = used
 
-    print(format_record(record, as_json=args.json))
+    # Surface any post-revision supersessions affecting this provision so the
+    # caller never quotes stale text without seeing the update.
+    supers = _fetch_supersessions(conn, parsed["citation_normalized"])
+
+    if args.json:
+        record["supersessions"] = supers
+        print(format_record(record, as_json=True))
+    else:
+        print(format_record(record, as_json=False))
+        if supers:
+            print(_format_supersession_block(supers))
     return 0
 
 

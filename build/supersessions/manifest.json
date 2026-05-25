@@ -1,0 +1,71 @@
+{
+  "supersessions_through": "2025-12-05",
+  "pdf_bundle_cap_bytes": 3145728,
+  "memos": [
+    {
+      "slug": "desjardins",
+      "title": "Advance notice of change to the MPEP in light of Ex Parte Desjardins",
+      "memo_date": "2025-12-05",
+      "effective_date": "2025-12-05",
+      "legal_trigger": "Ex Parte Desjardins, Appeal No. 2024-000567 (PTAB Sept. 26, 2025, Appeals Review Panel Decision) (precedential)",
+      "class": "section_anc",
+      "source_pdf_url": "https://www.uspto.gov/web/offices/pac/mpep/ANC-Desjardins-Memo-12-5-25.pdf",
+      "pdf_sha256": "d5a59072946f5c7887ab0272ddaa37ac6cc17d19c07eddef439c0f0406755f1a",
+      "pdf_bytes": 326292,
+      "source_dir": "desjardins",
+      "record_count": 5
+    },
+    {
+      "slug": "similarity-search",
+      "title": "Advance Notice of Change to the MPEP to provide guidance on the use of PE2E Search's Similarity Search feature",
+      "memo_date": "2025-10-24",
+      "effective_date": "2025-10-24",
+      "legal_trigger": "PE2E Search Similarity Search recordation requirement (1504 OG 359, Nov. 15, 2022)",
+      "class": "section_anc",
+      "source_pdf_url": "https://www.uspto.gov/sites/default/files/documents/MPEP-similarity-search.pdf",
+      "pdf_sha256": "1036980322268a5fe4128e45c216c9f66e4ea157c5132be92d2e46f6321190c9",
+      "pdf_bytes": 287000,
+      "source_dir": "similarity-search",
+      "record_count": 3
+    },
+    {
+      "slug": "entity-status",
+      "title": "Advance notice of change to the MPEP with respect to false assertions or certifications of entity status",
+      "memo_date": "2025-10-24",
+      "effective_date": "2025-10-24",
+      "legal_trigger": "Statutory Penalties for False Assertions or Certifications of Small and Micro Entity Status (1536 OG 204, July 8, 2025)",
+      "class": "section_anc",
+      "source_pdf_url": "https://www.uspto.gov/sites/default/files/documents/MPEP-certificate-entity-status.pdf",
+      "pdf_sha256": "00d132d1d4c292cdebcf20f59f754041f29b736dbf6e8f186e15b79db1aa08b6",
+      "pdf_bytes": 365681,
+      "source_dir": "entity-status",
+      "record_count": 4
+    },
+    {
+      "slug": "design-fp",
+      "title": "Revised Form Paragraphs for Design Patents and Applications",
+      "memo_date": "2025-01-14",
+      "effective_date": "2025-01-14",
+      "legal_trigger": "LKQ Corp. v. GM Glob. Tech. Operations LLC, 102 F.4th 1280 (Fed. Cir. 2024) (en banc), overruling the Rosen-Durling design-obviousness test",
+      "class": "fp_memo",
+      "source_pdf_url": "https://www.uspto.gov/sites/default/files/documents/mpep_revised_design_fp_14jan2025.pdf",
+      "pdf_sha256": "6614700d728f76549b31fdaabc4e220f9703629abf8e8196bfd1fe18c5e2ccfb",
+      "pdf_bytes": 154025,
+      "source_dir": "design-fp",
+      "record_count": 8
+    },
+    {
+      "slug": "fy2025-fees",
+      "title": "Revised and New Form Paragraphs in View of Setting and Adjusting Patent Fees During Fiscal Year 2025",
+      "memo_date": "2025-01-17",
+      "effective_date": "2025-01-19",
+      "legal_trigger": "Setting and Adjusting Patent Fees During Fiscal Year 2025 (final rule, eff. Jan. 19, 2025)",
+      "class": "fp_memo",
+      "source_pdf_url": "https://www.uspto.gov/sites/default/files/documents/advance_notice_fp_17jan2025.pdf",
+      "pdf_sha256": "2d7db827a4a53e5e55647734a11c20f75d1ff3b2db05ec118e15477fecf03d09",
+      "pdf_bytes": 266253,
+      "source_dir": "fy2025-fees",
+      "record_count": 45
+    }
+  ]
+}

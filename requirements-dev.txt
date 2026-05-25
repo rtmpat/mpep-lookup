@@ -1,2 +1,5 @@
 -r requirements.txt
 pytest>=8.0
+# Redline verification: detects PDF strike/underline marks so deleted words
+# cannot silently leak into transcribed "revised" text. See build/verify_redlines.py.
+pdfplumber>=0.11

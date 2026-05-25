@@ -1,6 +1,6 @@
 ---
 name: mpep-lookup
-version: 1.0.0
+version: 1.1.0
 description: Look up, search, summarize, analyze, and apply the USPTO MPEP, 35 USC statutes (Appendix L), 37 CFR rules (Appendix R), and Form Paragraphs. Use whenever the user cites an MPEP section, statute, or rule; asks what the MPEP says about a topic; asks for analysis, summary, or application of patent prosecution authority; or needs a citation-precise patent practice answer. Use even if the user does not name the MPEP explicitly - questions about obviousness, anticipation, eligibility, restriction, RCE, IDS, double patenting, claim drafting, or any other patent prosecution matter should trigger this skill before generating from general knowledge. Returns verbatim quotations with pin cites, plus optional labeled LLM-generated summaries, IRAC analysis, or application to factual patterns. All LLM-generated content is explicitly labeled to distinguish from verbatim authority.
 ---
 
@@ -97,6 +97,19 @@ python scripts/index_lookup.py --entries 3 --sections 8 "incomplete reply"
 ```
 
 It prints the matched index entries (with their section pointers and any "See also" cross-references), then the verbatim section records those references resolve to. Quote from the resolved sections, not from the index entry itself. For broad full-text search (including statutes, rules, and Form Paragraphs, which the index does not cover), use `search.py`.
+
+## Supersessions (post-revision USPTO memos)
+
+The corpus is the MPEP edition in `metadata.source_revision` (R-01.2024) **plus** the USPTO advance-notice memos that supersede part of it before the next revision folds them in (`metadata.supersessions_through` records the cutoff). These are tracked in a sidecar `supersessions` table and surfaced automatically:
+
+- **`lookup.py` auto-appends a `SUPERSEDED IN PART` block** when the looked-up provision is affected. When you see it, the published body above is the R-01.2024 text; for the affected passages quote the **verbatim revised text** in the block and pin-cite the memo (title + date + source PDF URL), not the stale published text.
+- **`search.py` tags affected results** `[SUPERSEDED -- see supersession via lookup.py]`.
+- **`supersessions.py`** searches them directly: `--list` (all, by memo), `"<citation>"` (what affects a provision), `--search "<query>"` (FTS), `--memo <slug>` (one memo's changes).
+
+Two kinds of supersession, handled differently:
+
+- **Section ANCs carry verbatim revised text** (and a redline showing what changed). This is authoritative USPTO text — quote it like any other authority, under a `Rule`/`Quotation` label, pin-cited to the memo.
+- **Form-paragraph memos are notice-only.** The memo states that a form paragraph is new / revised / removed, but the revised FP *body* lives in PE2E-OC, **not** in this corpus. Report the change as a notice ("FP 7.40 was revised effective 2025-01-19 per [memo] to add a nonprovisional EOT") and **do not fabricate or quote a revised FP body** — there is none to quote. Looking up the FP returns the R-01.2024 body; flag that it has been revised and point to the memo.
 
 ## Output modes
 
@@ -331,6 +344,7 @@ After composing a response, perform this self-check:
 4. **Labeling discipline.** Every paragraph or block of text in your response is either (a) a `>` blockquote under a `**Quotation**` / `**Rule**` label, or (b) prose under one of the LLM-generated labels from the table above — with the umbrella-label exception: a single label at the top of an LLM block of three paragraphs or fewer covers the whole block, and sub-paragraph labeling within that block is optional. No mixing within a single block — a paragraph is either entirely quoted authority or entirely Claude's analysis. Any unlabeled LLM-generated content (i.e., a block carrying NO provenance label at all) is non-compliant.
 5. **Rule label has its blockquote.** Every `**Rule** — *verbatim from <cite>*:` label is immediately followed by a `>` blockquote whose contents pass the string-containment check against the corresponding `lookup.py` output. A `Rule` label not followed by a verbatim blockquote means you tried to assert a rule from memory — strike the label or retrieve and quote properly.
 6. **Citation retrieval.** Every citation in your response — including those in Rule blocks, Quotation blocks, inline references in Application/Conclusion blocks, and footers — has been retrieved via `lookup.py` during this conversation. If a citation appears that was never retrieved, retrieve it now. Do not ship `[verify before relying]` placeholders for citations that are in the corpus.
+7. **Supersession check.** If a cited provision is superseded (`lookup.py` appended a `SUPERSEDED` block, or `search.py` tagged it `[SUPERSEDED]`), the response must surface it: for a section ANC, quote the verbatim revised text pin-cited to the memo (do not present the published R-01.2024 text for that passage as current); for a form-paragraph memo, state the new/revised/removed notice and the memo, and do NOT fabricate a revised FP body.
 
 If any check fails, correct the response before sending.
 
@@ -382,15 +396,15 @@ If `search.py` returns `{"hits": [], "fts_query_parsed_ok": true}` (JSON mode) o
 
 ## Limitations
 
-- Corpus is locked to the revision recorded in `metadata.source_revision`.
+- Corpus is locked to the revision recorded in `metadata.source_revision`, plus the supersession memos through `metadata.supersessions_through` (see the Supersessions section). Revised form-paragraph *bodies* from those memos are not in the corpus (notice-only).
 - Cross-reference resolution is not automatic; run separate lookups for cited sections.
 - Vector / semantic similarity is not provided - search is keyword/phrase based. Use kind filters to narrow.
 - Form Paragraphs are examiner template language; the default search ranks them last. Use `--kind form_paragraph` when you specifically want them.
 
 ## Version
 
-This skill is **MPEP Lookup v1.0.0**. End every response produced with this skill with a footer on its own line, as the very last line of the response:
+This skill is **MPEP Lookup v1.1.0**. End every response produced with this skill with a footer on its own line, as the very last line of the response:
 
-`*MPEP Lookup v1.0.0*`
+`*MPEP Lookup v1.1.0*`
 
 `CHANGELOG.md` (bundled with the skill) summarizes the features of this version. When the version changes, update the footer string above, the `version` field in this file's frontmatter, and `CHANGELOG.md` together.

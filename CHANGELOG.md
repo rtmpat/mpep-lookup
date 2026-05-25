@@ -3,6 +3,45 @@
 All notable changes to the MPEP Lookup skill are documented here. The project
 follows semantic versioning (MAJOR.MINOR.PATCH).
 
+## v1.1.0
+
+Incorporates the USPTO advance-notice memoranda that supersede part of the
+Ninth Edition, Revision 01.2024 before the next revision, and fixes two corpus
+coverage gaps found while building it.
+
+### Supersessions
+- New sidecar `supersessions` table (with an FTS mirror) overlaying R-01.2024
+  with five post-revision USPTO memos (through 2025-12-05): *Ex Parte Desjardins*
+  (35 U.S.C. 101), PE2E Similarity Search recordation, false entity-status
+  review, the *LKQ* design form-paragraph changes, and the FY2025 fee-rule form
+  paragraphs — 65 affected provisions in total.
+- Section-change memos store verbatim revised text plus a redline; form-paragraph
+  memos are notice-only (the revised FP body lives in PE2E-OC and is never
+  fabricated here).
+- `lookup.py` auto-appends a `SUPERSEDED` block on affected provisions;
+  `search.py` tags affected results; new `scripts/supersessions.py` searches
+  supersessions directly (`--list` / `"<citation>"` / `--search` / `--memo`).
+- Source memos are committed under `build/supersessions/` with a manifest; the
+  build fails loud if the live USPTO supersede list, the manifest, the source
+  files, and the loaded records diverge. Source PDFs are bundled smallest-first
+  under a 3 MiB cap and always linked.
+- `build/verify_redlines.py` verifies each redline against the source PDF's
+  strike/underline marks (via pdfplumber) so deleted words cannot silently leak
+  into revised text.
+
+### Corpus coverage fixes
+- Sub-subsection citations like MPEP 2106.04(d)(1) (letter + number) were
+  silently dropped by the parser; they now parse and are retrievable (+49
+  records). The build fails loud on any unparsed section-shaped heading.
+- Inline form-paragraph examples inside section files were sliced off and
+  dropped; they are now folded into their parent section, recovering 81
+  section-only form paragraphs and previously-truncated section tails.
+
+### Metadata
+- `source_revision` stays R-01.2024; adds `supersessions_through`,
+  `supersession_count`, and the bundled / link-only PDF lists. `builder_version`
+  is 1.1.0.
+
 ## v1.0.0
 
 Initial release. MPEP Lookup is a Claude skill for verbatim, citation-precise

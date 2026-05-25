@@ -245,3 +245,71 @@ revision-number) over the distinct markers; malformed ones (e.g. a typo'd
 from per-record data, `LIMIT 1` is a latent bug - aggregate (max/mode) instead.
 This one stayed invisible until the release-asset naming put the wrong value in
 front of a human.
+
+## 2026-05-25 - (letter)(number) sub-subsections were silently dropped by the parser
+
+**Problem:** MPEP 2106.04(d)(1) and ~48 other `NNNN.NN(letter)(number)`
+sub-subsections (e.g. 1002.02(c)(1), 2133.03(e)(1-7)) were entirely absent from
+the corpus - no record, and their text not even in the parent.
+
+**Root cause:** two bugs compounded. (1) `_RE_HEADING_MPEP`'s number pattern
+allowed only ONE parenthetical group (`(?:\([a-z]\))?`), so a heading like
+"2106.04(d)(1) ..." failed to match and `parse_citation` raised. (2)
+`02_parse_to_markdown.py` treated that `ValueError` as "end-of-document chrome"
+and silently `continue`d - so the `<h1 class="page-title">` slice (heading AND
+its body) was dropped, not merged into the parent.
+
+**Solution:** generalized the number to `(?:\([a-z0-9]+\))*` in both
+`_RE_HEADING_MPEP` and `_RE_USER_MPEP`, fixed `_mpep_parent` to strip the LAST
+paren group, and added a FAIL-LOUD guard: unparsed `h1.page-title` headings are
+logged to `_dropped_headings.json` and the build aborts if any "looks like a
+real section" (matches `^\d`, not `[Reserved]`).
+
+**Lesson:** a parser that silently skips anything it can't parse hides coverage
+gaps for years. The supersession work's "no silent failure" principle, applied
+to the build, surfaced this. Any drop of content-bearing input must be loud.
+
+## 2026-05-25 - inline form paragraphs were sliced off sections and dropped
+
+**Problem (found by user spot-check):** USPTO marks each inline form-paragraph
+example inside a section file as its own `<h1 class="page-title">` (e.g.
+"PARAGRAPH 12.249 ..."). The parser sliced the section record at each such h1
+and dropped the slice - losing 894 inline FPs across the corpus. 81 were
+section-only (no appendix record) and lost outright; section prose following an
+inline FP was orphaned into the dropped slice and truncated from the section.
+
+**Solution:** `parse_mpep_section_file` now FOLDS inline pilcrow (`chr(0xB6)`)
+slices into the current section's body instead of dropping them (the FP example
+is part of the section as the MPEP reads). The fail-loud guard was re-tightened:
+ANY content-bearing dropped slice that is not `[Reserved]` is suspicious. Only 9
+`[Reserved]` ranges now drop. (The appendix FP parser itself was clean - 0 drops.)
+
+**Lesson:** "dropped duplicate" is not the same as "dropped because unparsed."
+The longer-body-wins dedup masked nothing here; the loss was upstream, in record
+SLICING. Verify what a discarded slice actually contains before assuming noise.
+
+## 2026-05-25 - redline transcription from a PDF text layer is strikethrough-blind
+
+**Problem (found by user spot-check):** the revised text for MPEP 2106.04(d)(1)
+kept "is," that the memo PDF strikes through ("That is," -> "that"). The clean
+"revised" text had been read from `pdftotext` / the rendered page, neither of
+which encodes strikethrough - a struck word renders as ordinary text, so deleted
+words leaked into the "revised" text. Diffing the corpus original against that
+revised text then aligned the struck word as *kept*.
+
+**Why it is invisible to checks:** both `accept-all(redline) == revised` and a
+`reject-all(redline) == corpus-original` check PASS - the word is genuinely in
+the original, and the error is that it was not deleted. The only authority on
+what is deleted is the PDF's graphics layer.
+
+**Solution:** `build/verify_redlines.py` reads that graphics layer with
+pdfplumber (a thin rule through a word's vertical middle = strikethrough; at the
+baseline = underline) and FAILS LOUD if any struck word is not covered by a
+`[[del:]]` marker. Corrected process: transcribe the redline from the PDF marks,
+derive `revised = accept-all(redline)` - never source the final text from the
+flattened text layer.
+
+**Lesson:** when the source encodes meaning in *formatting* (strike/underline),
+a text-only extraction silently discards it. For redlined documents the graphics
+layer is the source of truth for deletions; internal consistency checks cannot
+substitute for it.
